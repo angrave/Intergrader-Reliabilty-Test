@@ -157,13 +157,13 @@ tr:nth-child(even) td { background: #f8f9fa; }
          tabindex="0"
          aria-label="Upload file: drag and drop, or press Enter or Space to browse for an Excel or TSV file">
       <div class="drop-icon" aria-hidden="true">&#128193;</div>
-      <div class="drop-main">Drag &amp; drop an Excel (.xlsx) or TSV file here</div>
+      <div class="drop-main">Drag &amp; drop an Excel (.xlsx), CSV, or TSV file here</div>
       <div class="drop-sub">or press Enter / Space to browse</div>
-      <input type="file" id="file-input" accept=".tsv,.txt,.xlsx,.xls"
-             aria-label="Choose an Excel or TSV file">
+      <input type="file" id="file-input" accept=".tsv,.csv,.txt,.xlsx,.xls"
+             aria-label="Choose an Excel, CSV, or TSV file">
     </div>
 
-    <label for="data-input">Or paste / edit data here (tab-separated, header row required):</label>
+    <label for="data-input">Or paste / edit data here (tab- or comma-separated, header row required):</label>
     <textarea id="data-input" spellcheck="false"
       aria-describedby="data-input-hint"
       placeholder="TA&#9;score&#10;Alice&#9;90&#10;Alice&#9;100&#10;Bob&#9;80&#10;Bob&#9;90"></textarea>
@@ -173,6 +173,7 @@ tr:nth-child(even) td { background: #f8f9fa; }
     </p>
 
     <button id="analyze-btn">Analyze</button>
+    <button id="example-btn" style="background:#6c757d;margin-left:0.5rem">Load example data</button>
     <!-- role="alert" causes screen readers to announce error messages immediately -->
     <span id="error-msg" role="alert"></span>
   </section>
@@ -384,9 +385,11 @@ function dunnTest(groups) {
 // Data parsing
 // ════════════════════════════════════════════════════════════════════════════
 
-function parseTSV(text) {
-  return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim()
-             .split('\n').map(l => l.split('\t'));
+function parseDelimited(text) {
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim().split('\n');
+  // Detect delimiter from the first line: prefer tab, fall back to comma
+  const delim = lines[0].includes('\t') ? '\t' : ',';
+  return lines.map(l => l.split(delim));
 }
 
 function rowsToRecords(rows) {
@@ -653,6 +656,7 @@ function analyze(rows) {
     }
 
     document.getElementById('results').style.display = '';
+    document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
     renderBarChart(graders, groups);
     requestAnimationFrame(() => drawBoxPlots(graders, groups));
 
@@ -683,7 +687,7 @@ function loadFile(file) {
   } else {
     reader.onload = e => {
       document.getElementById('data-input').value = e.target.result;
-      analyze(parseTSV(e.target.result));
+      analyze(parseDelimited(e.target.result));
     };
     reader.readAsText(file);
   }
@@ -714,9 +718,32 @@ document.getElementById('file-input').addEventListener('change', e => {
 
 // Button and paste
 document.getElementById('analyze-btn').addEventListener('click', () =>
-  analyze(parseTSV(document.getElementById('data-input').value)));
+  analyze(parseDelimited(document.getElementById('data-input').value)));
 document.getElementById('data-input').addEventListener('paste', () =>
-  setTimeout(() => analyze(parseTSV(document.getElementById('data-input').value)), 30));
+  setTimeout(() => analyze(parseDelimited(document.getElementById('data-input').value)), 30));
+
+// Load example data from scores.tsv in the same directory
+document.getElementById('example-btn').addEventListener('click', () => {
+  const btn = document.getElementById('example-btn');
+  btn.disabled = true;
+  btn.textContent = 'Loading…';
+  fetch('scores.tsv')
+    .then(r => {
+      if (!r.ok) throw new Error(`Could not fetch scores.tsv (${r.status})`);
+      return r.text();
+    })
+    .then(text => {
+      document.getElementById('data-input').value = text;
+      analyze(parseDelimited(text));
+    })
+    .catch(e => {
+      document.getElementById('error-msg').textContent = e.message;
+    })
+    .finally(() => {
+      btn.disabled = false;
+      btn.textContent = 'Load example data';
+    });
+});
 </script>
 </body>
 </html>
