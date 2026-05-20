@@ -26,7 +26,8 @@ h2 { font-size: 1rem; color: #495057; font-weight: 600;
   transition: border-color 0.15s, background 0.15s;
   margin-bottom: 1rem; user-select: none;
 }
-#dropzone.over { border-color: #0d6efd; background: #eaf1ff; color: #0d6efd; }
+#dropzone.over,
+#dropzone:focus { border-color: #0d6efd; background: #eaf1ff; color: #0d6efd; outline: 2px solid #0d6efd; outline-offset: 2px; }
 #dropzone input { display: none; }
 #dropzone .drop-icon { font-size: 2rem; }
 #dropzone .drop-main { font-weight: 600; margin-top: 0.4rem; }
@@ -45,11 +46,13 @@ button {
   margin-top: 0.75rem;
 }
 button:hover { background: #0b5ed7; }
+button:focus { outline: 2px solid #0d6efd; outline-offset: 2px; }
 
 #error-msg { color: #dc3545; margin-left: 1rem; font-size: 0.85rem; }
 
 /* ── Tables ─────────────────────────────────────────────────────────── */
 table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+caption { text-align: left; font-size: 0.8rem; color: #6c757d; margin-bottom: 0.4rem; caption-side: top; }
 th { background: #f8f9fa; padding: 0.45rem 0.75rem; text-align: left;
      border: 1px solid #dee2e6; font-weight: 600; }
 td { padding: 0.45rem 0.75rem; border: 1px solid #dee2e6; }
@@ -68,81 +71,114 @@ tr:nth-child(even) td { background: #f8f9fa; }
 @media (max-width: 680px) { .charts { grid-template-columns: 1fr; } }
 .chart-wrap { position: relative; }
 #box-canvas { width: 100%; display: block; }
+
+/* ── Screen-reader-only utility ─────────────────────────────────────── */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0;
+  margin: -1px; overflow: hidden; clip: rect(0,0,0,0);
+  white-space: nowrap; border: 0;
+}
 </style>
 </head>
 <body>
 
 <header>
   <h1>Grading Reliability Analysis</h1>
-  <p>Author: Lawrence Angrave &nbsp;·&nbsp; Kruskal-Wallis test for randomly-assigned graders</p>
+  <p>Author: Lawrence Angrave &nbsp;·&nbsp; Kruskal-Wallis test for randomly-assigned graders &nbsp;·&nbsp; <a href="https://github.com/angrave/Intergrader-Reliabilty-Test/" style="color:#adb5bd" target="_blank" rel="noopener">GitHub</a> (Python version also available in repo)</p>
 </header>
+
+<!-- Polite live region: announces brief status updates to screen readers -->
+<div id="status-announce" aria-live="polite" class="sr-only"></div>
 
 <main>
 
   <!-- ── Input ───────────────────────────────────────────────────────── -->
-  <div class="card">
-    <h2>Data Input</h2>
+  <section class="card" aria-labelledby="h2-input">
+    <h2 id="h2-input">Data Input</h2>
+    <p style="font-size:0.82rem;color:#6c757d;margin-bottom:1rem">
+      &#128274; All processing happens entirely in your browser.
+      No data is uploaded or sent to any server.
+    </p>
 
-    <div id="dropzone" onclick="document.getElementById('file-input').click()">
-      <div class="drop-icon">&#128193;</div>
+    <!-- role="button" + tabindex make this keyboard-operable; keydown handler below activates on Enter/Space -->
+    <div id="dropzone"
+         role="button"
+         tabindex="0"
+         aria-label="Upload file: drag and drop, or press Enter or Space to browse for an Excel or TSV file">
+      <div class="drop-icon" aria-hidden="true">&#128193;</div>
       <div class="drop-main">Drag &amp; drop an Excel (.xlsx) or TSV file here</div>
-      <div class="drop-sub">or click to browse</div>
-      <input type="file" id="file-input" accept=".tsv,.txt,.xlsx,.xls">
+      <div class="drop-sub">or press Enter / Space to browse</div>
+      <input type="file" id="file-input" accept=".tsv,.txt,.xlsx,.xls"
+             aria-label="Choose an Excel or TSV file">
     </div>
 
     <label for="data-input">Or paste / edit data here (tab-separated, header row required):</label>
     <textarea id="data-input" spellcheck="false"
+      aria-describedby="data-input-hint"
       placeholder="TA&#9;score&#10;Alice&#9;90&#10;Alice&#9;100&#10;Bob&#9;80&#10;Bob&#9;90"></textarea>
+    <p id="data-input-hint" class="sr-only">
+      Tab-separated values with a header row. First column is grader name, second column is numeric score.
+      Pasting data here will trigger analysis automatically.
+    </p>
 
     <button id="analyze-btn">Analyze</button>
-    <span id="error-msg"></span>
-  </div>
+    <!-- role="alert" causes screen readers to announce error messages immediately -->
+    <span id="error-msg" role="alert"></span>
+  </section>
 
   <!-- ── Results ─────────────────────────────────────────────────────── -->
   <div id="results" style="display:none">
 
-    <div class="card">
-      <h2>Data Summary</h2>
+    <section class="card" aria-labelledby="h2-summary">
+      <h2 id="h2-summary">Data Summary</h2>
       <div id="data-summary"></div>
-    </div>
+    </section>
 
-    <div class="card">
-      <h2>Descriptive Statistics</h2>
+    <section class="card" aria-labelledby="h2-stats">
+      <h2 id="h2-stats">Descriptive Statistics</h2>
       <div id="stats-table"></div>
-    </div>
+    </section>
 
-    <div class="card">
-      <h2>Kruskal-Wallis Test</h2>
+    <section class="card" aria-labelledby="h2-kw">
+      <h2 id="h2-kw">Kruskal-Wallis Test</h2>
       <div id="kw-result"></div>
       <p style="font-size:0.8rem;color:#6c757d;margin-top:0.75rem">
         H&#x2080;: all graders draw from the same score distribution.
         Non-parametric rank-based test; appropriate when graders are randomly assigned
         and scores are ordinal. &eta;&sup2; is the effect size (0 = no effect).
       </p>
-    </div>
+    </section>
 
-    <div id="dunn-card" class="card" style="display:none">
-      <h2>Dunn's Post-Hoc Test &mdash; Bonferroni-corrected pairwise p-values</h2>
+    <section id="dunn-card" class="card" aria-labelledby="h2-dunn" style="display:none">
+      <h2 id="h2-dunn">Dunn's Post-Hoc Test &mdash; Bonferroni-corrected pairwise p-values</h2>
       <p style="font-size:0.82rem;color:#6c757d;margin-bottom:0.85rem">
         Shown because the overall Kruskal-Wallis test was significant.
         Highlighted cells (p&nbsp;&lt;&nbsp;0.05) indicate a grader pair with a
         statistically significant difference in score distributions.
       </p>
       <div id="dunn-result"></div>
-    </div>
+    </section>
 
-    <div class="card">
-      <h2>Visualizations</h2>
+    <section class="card" aria-labelledby="h2-viz">
+      <h2 id="h2-viz">Visualizations</h2>
       <div class="charts">
-        <div class="chart-wrap"><canvas id="bar-chart"></canvas></div>
-        <div class="chart-wrap"><canvas id="box-canvas"></canvas></div>
+        <div class="chart-wrap">
+          <!-- aria-label updated dynamically after chart renders -->
+          <canvas id="bar-chart" role="img" aria-label="Score distribution bar chart (not yet rendered)"></canvas>
+        </div>
+        <div class="chart-wrap">
+          <!-- aria-label updated dynamically after chart renders -->
+          <canvas id="box-canvas" role="img" aria-label="Score distribution box plots (not yet rendered)"></canvas>
+        </div>
       </div>
-    </div>
+    </section>
 
   </div>
+
 </main>
 
-<!-- CDN: SheetJS for Excel parsing; Chart.js for stacked bar chart -->
+<!-- CDN: SkipTo.js for keyboard/screen-reader navigation; SheetJS for Excel parsing; Chart.js for stacked bar chart -->
+<script src="https://cdn.jsdelivr.net/gh/skipto-landmarks-headings/page-script-5@5/src/skipto.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
@@ -341,15 +377,17 @@ function renderStats(graders, groups) {
     return [g, n, f2(mean), f2(percentile(d, 50)), f2(std), d[0], d[n-1]];
   });
   return `<table>
-    <tr><th>Grader</th><th>n</th><th>Mean</th><th>Median</th><th>Std</th><th>Min</th><th>Max</th></tr>
-    ${rows.map(r => `<tr>${r.map((v, i) => `<t${i===0?'h':'d'}>${v}</t${i===0?'h':'d'}>`).join('')}</tr>`).join('')}
+    <caption>Summary statistics (mean, median, std, range) for each grader</caption>
+    <tr><th scope="col">Grader</th><th scope="col">n</th><th scope="col">Mean</th><th scope="col">Median</th><th scope="col">Std</th><th scope="col">Min</th><th scope="col">Max</th></tr>
+    ${rows.map(r => `<tr><th scope="row">${r[0]}</th>${r.slice(1).map(v => `<td>${v}</td>`).join('')}</tr>`).join('')}
   </table>`;
 }
 
 function renderKW(kw, alpha = 0.05) {
   const sig = kw.p < alpha;
+  // role="status" announces the verdict to screen readers when content is injected
   return `
-    <div class="kw-banner ${sig ? 'sig' : 'not-sig'}">
+    <div class="kw-banner ${sig ? 'sig' : 'not-sig'}" role="status">
       <div class="kw-stat">H(${kw.df}) = ${f4(kw.H)}&ensp;|&ensp;p = ${f4(kw.p)}&ensp;|&ensp;&eta;&sup2; = ${f4(kw.eta2)}</div>
       <div class="kw-verdict">${sig
         ? '<strong>Significant</strong> (p &lt; 0.05): at least one grader scores differently from the others.'
@@ -364,12 +402,20 @@ function renderDunn(dunn, graders, alpha = 0.05) {
   dunn.forEach(({ a, b, pAdj }) => { mat[a][b] = mat[b][a] = pAdj; });
 
   return `<table>
-    <tr><th></th>${graders.map(g => `<th>${g}</th>`).join('')}</tr>
-    ${graders.map((g, i) => `<tr><th>${g}</th>${graders.map((_, j) => {
-      if (i === j) return '<td style="background:#f1f3f5;color:#adb5bd">—</td>';
-      const v = mat[i][j];
-      return `<td${v < alpha ? ' class="dunn-sig"' : ''}>${f4(v)}</td>`;
-    }).join('')}</tr>`).join('')}
+    <caption>Bonferroni-adjusted p-values for each grader pair. Values below ${alpha} (highlighted) indicate a significant difference.</caption>
+    <tr><th scope="col"></th>${graders.map(g => `<th scope="col">${g}</th>`).join('')}</tr>
+    ${graders.map((g, i) => `<tr>
+      <th scope="row">${g}</th>
+      ${graders.map((_, j) => {
+        if (i === j) return '<td style="background:#f1f3f5;color:#adb5bd" aria-label="same grader">—</td>';
+        const v = mat[i][j];
+        const sig = v < alpha;
+        // Significance conveyed in text via .sr-only, not by color alone
+        return `<td${sig ? ' class="dunn-sig"' : ''} aria-label="${graders[i]} vs ${graders[j]}: p=${f4(v)}${sig ? ', significant' : ''}">
+          ${f4(v)}${sig ? '<span class="sr-only"> (significant)</span>' : ''}
+        </td>`;
+      }).join('')}
+    </tr>`).join('')}
   </table>`;
 }
 
@@ -392,8 +438,9 @@ function renderBarChart(graders, groups) {
   const minS = allScores[0], maxS = allScores.at(-1);
 
   if (barInstance) barInstance.destroy();
+  const canvas = document.getElementById('bar-chart');
   barInstance = new Chart(
-    document.getElementById('bar-chart').getContext('2d'),
+    canvas.getContext('2d'),
     {
       type: 'bar',
       data: {
@@ -417,6 +464,11 @@ function renderBarChart(graders, groups) {
         },
       },
     }
+  );
+  // Update aria-label with a meaningful text summary
+  canvas.setAttribute('aria-label',
+    `Stacked bar chart showing score distributions for ${graders.join(', ')}. ` +
+    `Score categories: ${allScores.join(', ')}.`
   );
 }
 
@@ -444,7 +496,6 @@ function drawBoxPlots(graders, groups) {
   const bw = (pw / k) * 0.42;
   const cx = i => pad.left + (i + 0.5) * (pw / k);
 
-  // Background
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, CW, CH);
 
@@ -459,16 +510,16 @@ function drawBoxPlots(graders, groups) {
     ctx.fillText(v, pad.left - 5, y + 4);
   });
 
-  // Y axis line
   ctx.strokeStyle = '#adb5bd'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(pad.left, pad.top); ctx.lineTo(pad.left, pad.top + ph); ctx.stroke();
 
-  // Title
   ctx.fillStyle = '#212529'; ctx.font = 'bold 13px system-ui';
   ctx.textAlign = 'center';
   ctx.fillText('Score Distributions', CW / 2, 20);
 
-  // One box plot per grader
+  // Build aria-label text while drawing
+  const summaries = [];
+
   groups.forEach((data, i) => {
     const s = [...data].sort((a, b) => a - b);
     const n = s.length;
@@ -478,18 +529,17 @@ function drawBoxPlots(graders, groups) {
     const wHi = Math.min(s[n-1], q3 + 1.5 * iqr);
     const x = cx(i), capW = bw * 0.45;
 
-    // Box fill + stroke
+    summaries.push(`${graders[i]}: median ${f2(med)}, Q1 ${f2(q1)}, Q3 ${f2(q3)}, range ${s[0]}–${s[n-1]}`);
+
     const bTop = yScale(q3), bBot = yScale(q1);
     ctx.fillStyle = 'rgba(13,110,253,0.13)';
     ctx.fillRect(x - bw/2, bTop, bw, bBot - bTop);
     ctx.strokeStyle = '#0d6efd'; ctx.lineWidth = 1.5;
     ctx.strokeRect(x - bw/2, bTop, bw, bBot - bTop);
 
-    // Median line
     ctx.lineWidth = 2.5; ctx.strokeStyle = '#0d6efd';
     ctx.beginPath(); ctx.moveTo(x - bw/2, yScale(med)); ctx.lineTo(x + bw/2, yScale(med)); ctx.stroke();
 
-    // Whiskers + caps
     ctx.strokeStyle = '#495057'; ctx.lineWidth = 1.5;
     [[wLo, q1], [q3, wHi]].forEach(([from, to]) => {
       ctx.beginPath(); ctx.moveTo(x, yScale(from)); ctx.lineTo(x, yScale(to)); ctx.stroke();
@@ -497,7 +547,6 @@ function drawBoxPlots(graders, groups) {
       ctx.beginPath(); ctx.moveTo(x - capW/2, capY); ctx.lineTo(x + capW/2, capY); ctx.stroke();
     });
 
-    // Outliers (red dots)
     ctx.fillStyle = '#dc3545';
     s.forEach(v => {
       if (v < wLo || v > wHi) {
@@ -505,17 +554,28 @@ function drawBoxPlots(graders, groups) {
       }
     });
 
-    // X label
     ctx.fillStyle = '#212529';
     ctx.font = `${12 * Math.min(1, CW / 400)}px system-ui`;
     ctx.textAlign = 'center';
     ctx.fillText(graders[i], x, CH - pad.bottom + 18);
   });
+
+  // Update aria-label with per-grader statistics for screen readers
+  canvas.setAttribute('aria-label',
+    'Box plots showing score distributions. ' + summaries.join('. ')
+  );
 }
 
 // ════════════════════════════════════════════════════════════════════════════
 // Main entry point
 // ════════════════════════════════════════════════════════════════════════════
+
+function announce(msg) {
+  // Brief polite announcement; cleared and reset to trigger re-read if called again
+  const el = document.getElementById('status-announce');
+  el.textContent = '';
+  requestAnimationFrame(() => { el.textContent = msg; });
+}
 
 function analyze(rows) {
   const errEl = document.getElementById('error-msg');
@@ -544,6 +604,9 @@ function analyze(rows) {
     document.getElementById('results').style.display = '';
     renderBarChart(graders, groups);
     requestAnimationFrame(() => drawBoxPlots(graders, groups));
+
+    const verdict = kw.p < 0.05 ? 'significant difference detected' : 'no significant difference detected';
+    announce(`Analysis complete. ${graders.length} graders, ${records.length} scores. Kruskal-Wallis: ${verdict}, p = ${f4(kw.p)}.`);
 
   } catch (e) {
     errEl.textContent = e.message;
@@ -584,6 +647,16 @@ dz.addEventListener('drop', e => {
   const f = e.dataTransfer.files[0];
   if (f) loadFile(f);
 });
+
+// Keyboard activation for the dropzone button (Enter or Space)
+dz.addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    document.getElementById('file-input').click();
+  }
+});
+
+dz.addEventListener('click', () => document.getElementById('file-input').click());
 document.getElementById('file-input').addEventListener('change', e => {
   if (e.target.files[0]) loadFile(e.target.files[0]);
 });
