@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Grading Reliability Analysis</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui, -apple-system, sans-serif; background: #f8f9fa; color: #212529; }
+
+header { background: #343a40; color: white; padding: 1.25rem 2rem; }
+header h1 { font-size: 1.4rem; }
+header p  { color: #adb5bd; font-size: 0.85rem; margin-top: 0.2rem; }
+
+main { max-width: 1100px; margin: 1.75rem auto; padding: 0 1rem; }
+
+.card { background: white; border-radius: 8px; border: 1px solid #dee2e6; padding: 1.25rem 1.5rem; margin-bottom: 1.5rem; }
+
+h2 { font-size: 1rem; color: #495057; font-weight: 600;
+     border-bottom: 1px solid #e9ecef; padding-bottom: 0.4rem; margin-bottom: 1rem; }
+
+/* ── Drop zone ─────────────────────────────────────────────────────── */
+#dropzone {
+  border: 2px dashed #adb5bd; border-radius: 8px; padding: 1.75rem 1rem;
+  text-align: center; cursor: pointer; color: #6c757d;
+  transition: border-color 0.15s, background 0.15s;
+  margin-bottom: 1rem; user-select: none;
+}
+#dropzone.over { border-color: #0d6efd; background: #eaf1ff; color: #0d6efd; }
+#dropzone input { display: none; }
+#dropzone .drop-icon { font-size: 2rem; }
+#dropzone .drop-main { font-weight: 600; margin-top: 0.4rem; }
+#dropzone .drop-sub  { font-size: 0.8rem; margin-top: 0.15rem; }
+
+/* ── Paste area ────────────────────────────────────────────────────── */
+label { font-size: 0.85rem; color: #495057; display: block; margin-bottom: 0.4rem; }
+textarea {
+  width: 100%; height: 140px; font-family: monospace; font-size: 0.82rem;
+  border: 1px solid #ced4da; border-radius: 4px; padding: 0.6rem 0.75rem; resize: vertical;
+}
+
+button {
+  background: #0d6efd; color: white; border: none;
+  padding: 0.55rem 1.4rem; border-radius: 4px; cursor: pointer; font-size: 0.9rem;
+  margin-top: 0.75rem;
+}
+button:hover { background: #0b5ed7; }
+
+#error-msg { color: #dc3545; margin-left: 1rem; font-size: 0.85rem; }
+
+/* ── Tables ─────────────────────────────────────────────────────────── */
+table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+th { background: #f8f9fa; padding: 0.45rem 0.75rem; text-align: left;
+     border: 1px solid #dee2e6; font-weight: 600; }
+td { padding: 0.45rem 0.75rem; border: 1px solid #dee2e6; }
+tr:nth-child(even) td { background: #f8f9fa; }
+.dunn-sig { background: #fff3cd !important; font-weight: 700; }
+
+/* ── KW result banner ───────────────────────────────────────────────── */
+.kw-banner { padding: 0.9rem 1.25rem; border-radius: 6px; margin-bottom: 0.5rem; }
+.kw-banner.sig     { background: #fff3cd; border-left: 4px solid #ffc107; }
+.kw-banner.not-sig { background: #d1e7dd; border-left: 4px solid #198754; }
+.kw-stat           { font-size: 1rem; font-weight: 700; font-family: monospace; }
+.kw-verdict        { margin-top: 0.3rem; font-size: 0.9rem; color: #343a40; }
+
+/* ── Charts ─────────────────────────────────────────────────────────── */
+.charts { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; align-items: start; }
+@media (max-width: 680px) { .charts { grid-template-columns: 1fr; } }
+.chart-wrap { position: relative; }
+#box-canvas { width: 100%; display: block; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Grading Reliability Analysis</h1>
+  <p>Author: Lawrence Angrave &nbsp;·&nbsp; Kruskal-Wallis test for randomly-assigned graders</p>
+</header>
+
+<main>
+
+  <!-- ── Input ───────────────────────────────────────────────────────── -->
+  <div class="card">
+    <h2>Data Input</h2>
+
+    <div id="dropzone" onclick="document.getElementById('file-input').click()">
+      <div class="drop-icon">&#128193;</div>
+      <div class="drop-main">Drag &amp; drop an Excel (.xlsx) or TSV file here</div>
+      <div class="drop-sub">or click to browse</div>
+      <input type="file" id="file-input" accept=".tsv,.txt,.xlsx,.xls">
+    </div>
+
+    <label for="data-input">Or paste / edit data here (tab-separated, header row required):</label>
+    <textarea id="data-input" spellcheck="false"
+      placeholder="TA&#9;score&#10;Alice&#9;90&#10;Alice&#9;100&#10;Bob&#9;80&#10;Bob&#9;90"></textarea>
+
+    <button id="analyze-btn">Analyze</button>
+    <span id="error-msg"></span>
+  </div>
+
+  <!-- ── Results ─────────────────────────────────────────────────────── -->
+  <div id="results" style="display:none">
+
+    <div class="card">
+      <h2>Data Summary</h2>
+      <div id="data-summary"></div>
+    </div>
+
+    <div class="card">
+      <h2>Descriptive Statistics</h2>
+      <div id="stats-table"></div>
+    </div>
+
+    <div class="card">
+      <h2>Kruskal-Wallis Test</h2>
+      <div id="kw-result"></div>
+      <p style="font-size:0.8rem;color:#6c757d;margin-top:0.75rem">
+        H&#x2080;: all graders draw from the same score distribution.
+        Non-parametric rank-based test; appropriate when graders are randomly assigned
+        and scores are ordinal. &eta;&sup2; is the effect size (0 = no effect).
+      </p>
+    </div>
+
+    <div id="dunn-card" class="card" style="display:none">
+      <h2>Dunn's Post-Hoc Test &mdash; Bonferroni-corrected pairwise p-values</h2>
+      <p style="font-size:0.82rem;color:#6c757d;margin-bottom:0.85rem">
+        Shown because the overall Kruskal-Wallis test was significant.
+        Highlighted cells (p&nbsp;&lt;&nbsp;0.05) indicate a grader pair with a
+        statistically significant difference in score distributions.
+      </p>
+      <div id="dunn-result"></div>
+    </div>
+
+    <div class="card">
+      <h2>Visualizations</h2>
+      <div class="charts">
+        <div class="chart-wrap"><canvas id="bar-chart"></canvas></div>
+        <div class="chart-wrap"><canvas id="box-canvas"></canvas></div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<!-- CDN: SheetJS for Excel parsing; Chart.js for stacked bar chart -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<script>
+'use strict';
+
+// ════════════════════════════════════════════════════════════════════════════
+// Maths utilities
+// ════════════════════════════════════════════════════════════════════════════
+
+// Lanczos approximation for ln Γ(x)
+function gammaln(x) {
+  const p = [0.99999999999980993, 676.5203681218851, -1259.1392167224028,
+             771.32342877765313, -176.61502916214059, 12.507343278686905,
+             -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+  if (x < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * x)) - gammaln(1 - x);
+  x -= 1;
+  let a = p[0];
+  const t = x + 7.5;
+  for (let i = 1; i < 9; i++) a += p[i] / (x + i);
+  return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a);
+}
+
+// Regularized lower incomplete gamma P(a, x):
+//   series expansion for x < a+1, continued fraction otherwise
+function regularizedGammaP(a, x) {
+  if (x <= 0) return 0;
+  if (x < a + 1) {
+    let term = 1 / a, sum = term;
+    for (let n = 1; n <= 300; n++) {
+      term *= x / (a + n);
+      sum += term;
+      if (Math.abs(term) < 1e-12 * Math.abs(sum)) break;
+    }
+    return sum * Math.exp(-x + a * Math.log(x) - gammaln(a));
+  }
+  // Complement via Lentz continued fraction
+  const TINY = 1e-300;
+  let b = x + 1 - a, c = 1 / TINY, d = 1 / b, h = d;
+  for (let i = 1; i <= 300; i++) {
+    const an = -i * (i - a);
+    b += 2;
+    d = an * d + b; if (Math.abs(d) < TINY) d = TINY; d = 1 / d;
+    c = b + an / c; if (Math.abs(c) < TINY) c = TINY;
+    const del = d * c; h *= del;
+    if (Math.abs(del - 1) < 1e-12) break;
+  }
+  return 1 - Math.exp(-x + a * Math.log(x) - gammaln(a)) * h;
+}
+
+// Upper tail of chi-squared distribution: P(X > chi2) with df degrees of freedom
+function chi2pvalue(chi2, df) {
+  if (chi2 <= 0) return 1;
+  return 1 - regularizedGammaP(df / 2, chi2 / 2);
+}
+
+// Standard normal CDF via Abramowitz & Stegun rational approximation
+function normalCDF(z) {
+  const sign = z >= 0 ? 1 : -1;
+  const x = Math.abs(z) / Math.SQRT2;
+  const t = 1 / (1 + 0.3275911 * x);
+  const poly = t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))));
+  return 0.5 * (1 + sign * (1 - poly * Math.exp(-x * x)));
+}
+
+// Percentile of a pre-sorted array (linear interpolation)
+function percentile(sorted, p) {
+  const idx = (p / 100) * (sorted.length - 1);
+  const lo = Math.floor(idx), hi = Math.ceil(idx);
+  return sorted[lo] + (idx - lo) * (sorted[hi] - sorted[lo]);
+}
+
+// Assign average ranks to a flat array; return ranks array and Σ(t³−t) for tie correction
+function rankWithTies(values) {
+  const n = values.length;
+  const idx = values.map((v, i) => ({ v, i })).sort((a, b) => a.v - b.v);
+  const ranks = new Array(n);
+  let tieSum = 0, i = 0;
+  while (i < n) {
+    let j = i;
+    while (j < n && idx[j].v === idx[i].v) j++;
+    const t = j - i;
+    const avg = (i + j + 1) / 2; // 1-indexed average rank
+    for (let k = i; k < j; k++) ranks[idx[k].i] = avg;
+    if (t > 1) tieSum += t * t * t - t;
+    i = j;
+  }
+  return { ranks, tieSum };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Statistical tests
+// ════════════════════════════════════════════════════════════════════════════
+
+function kruskalWallis(groups) {
+  const all = [];
+  groups.forEach((g, gi) => g.forEach(v => all.push({ v, gi })));
+  const N = all.length, k = groups.length;
+
+  const { ranks, tieSum } = rankWithTies(all.map(x => x.v));
+  all.forEach((item, i) => { item.rank = ranks[i]; });
+
+  const rankSums = new Array(k).fill(0);
+  all.forEach(({ gi, rank }) => { rankSums[gi] += rank; });
+
+  let H = 0;
+  groups.forEach((g, i) => { H += (rankSums[i] ** 2) / g.length; });
+  H = (12 / (N * (N + 1))) * H - 3 * (N + 1);
+  H /= (1 - tieSum / (N ** 3 - N)); // tie correction
+
+  return {
+    H,
+    p:    chi2pvalue(H, k - 1),
+    df:   k - 1,
+    eta2: Math.max(0, (H - k + 1) / (N - k)),
+  };
+}
+
+// Dunn's post-hoc test with Bonferroni correction;
+// returns array of { a, b, z, p, pAdj } for every pair
+function dunnTest(groups) {
+  const all = [];
+  groups.forEach((g, gi) => g.forEach(v => all.push({ v, gi })));
+  const N = all.length, k = groups.length;
+
+  const { ranks, tieSum } = rankWithTies(all.map(x => x.v));
+  all.forEach((item, i) => { item.rank = ranks[i]; });
+
+  const rankSums = new Array(k).fill(0);
+  all.forEach(({ gi, rank }) => { rankSums[gi] += rank; });
+  const meanRanks = groups.map((g, i) => rankSums[i] / g.length);
+
+  const tieFactor = tieSum / (12 * (N - 1));
+  const m = k * (k - 1) / 2; // number of comparisons (Bonferroni denominator)
+  const results = [];
+
+  for (let a = 0; a < k; a++) {
+    for (let b = a + 1; b < k; b++) {
+      const se = Math.sqrt(
+        (N * (N + 1) / 12 - tieFactor) * (1 / groups[a].length + 1 / groups[b].length)
+      );
+      const z    = Math.abs(meanRanks[a] - meanRanks[b]) / se;
+      const p    = 2 * (1 - normalCDF(z));
+      const pAdj = Math.min(p * m, 1);
+      results.push({ a, b, z, p, pAdj });
+    }
+  }
+  return results;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Data parsing
+// ════════════════════════════════════════════════════════════════════════════
+
+function parseTSV(text) {
+  return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim()
+             .split('\n').map(l => l.split('\t'));
+}
+
+function rowsToRecords(rows) {
+  if (rows.length < 2) throw new Error('Need at least a header row and one data row.');
+  const records = [];
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i].length < 2 || rows[i].every(c => !c.trim())) continue;
+    const grader = String(rows[i][0]).trim();
+    const score  = parseFloat(rows[i][1]);
+    if (grader && !isNaN(score)) records.push({ grader, score });
+  }
+  if (!records.length) throw new Error('No valid data rows found.');
+  return records;
+}
+
+function groupRecords(records) {
+  const map = new Map();
+  records.forEach(({ grader, score }) => {
+    if (!map.has(grader)) map.set(grader, []);
+    map.get(grader).push(score);
+  });
+  const graders = [...map.keys()].sort();
+  return { graders, groups: graders.map(g => map.get(g)) };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// HTML rendering
+// ════════════════════════════════════════════════════════════════════════════
+
+const f4 = n => n.toFixed(4);
+const f2 = n => n.toFixed(2);
+
+function renderStats(graders, groups) {
+  const rows = graders.map((g, i) => {
+    const d = [...groups[i]].sort((a, b) => a - b);
+    const n = d.length;
+    const mean = d.reduce((s, v) => s + v, 0) / n;
+    const std  = n > 1 ? Math.sqrt(d.reduce((s, v) => s + (v - mean) ** 2, 0) / (n - 1)) : 0;
+    return [g, n, f2(mean), f2(percentile(d, 50)), f2(std), d[0], d[n-1]];
+  });
+  return `<table>
+    <tr><th>Grader</th><th>n</th><th>Mean</th><th>Median</th><th>Std</th><th>Min</th><th>Max</th></tr>
+    ${rows.map(r => `<tr>${r.map((v, i) => `<t${i===0?'h':'d'}>${v}</t${i===0?'h':'d'}>`).join('')}</tr>`).join('')}
+  </table>`;
+}
+
+function renderKW(kw, alpha = 0.05) {
+  const sig = kw.p < alpha;
+  return `
+    <div class="kw-banner ${sig ? 'sig' : 'not-sig'}">
+      <div class="kw-stat">H(${kw.df}) = ${f4(kw.H)}&ensp;|&ensp;p = ${f4(kw.p)}&ensp;|&ensp;&eta;&sup2; = ${f4(kw.eta2)}</div>
+      <div class="kw-verdict">${sig
+        ? '<strong>Significant</strong> (p &lt; 0.05): at least one grader scores differently from the others.'
+        : '<strong>Not significant</strong> (p &ge; 0.05): graders\' distributions are consistent with random assignment.'
+      }</div>
+    </div>`;
+}
+
+function renderDunn(dunn, graders, alpha = 0.05) {
+  const k = graders.length;
+  const mat = Array.from({length: k}, () => new Array(k).fill(null));
+  dunn.forEach(({ a, b, pAdj }) => { mat[a][b] = mat[b][a] = pAdj; });
+
+  return `<table>
+    <tr><th></th>${graders.map(g => `<th>${g}</th>`).join('')}</tr>
+    ${graders.map((g, i) => `<tr><th>${g}</th>${graders.map((_, j) => {
+      if (i === j) return '<td style="background:#f1f3f5;color:#adb5bd">—</td>';
+      const v = mat[i][j];
+      return `<td${v < alpha ? ' class="dunn-sig"' : ''}>${f4(v)}</td>`;
+    }).join('')}</tr>`).join('')}
+  </table>`;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Charts
+// ════════════════════════════════════════════════════════════════════════════
+
+let barInstance = null;
+
+// Interpolate a Red-Yellow-Green color for a score within [minS, maxS]
+function rdylgn(score, minS, maxS) {
+  const t = maxS === minS ? 1 : (score - minS) / (maxS - minS);
+  const r = t < 0.5 ? 220 : Math.round(220 * (1 - (t - 0.5) * 2));
+  const g = t < 0.5 ? Math.round(220 * t * 2) : 200;
+  return `rgba(${r},${g},30,0.88)`;
+}
+
+function renderBarChart(graders, groups) {
+  const allScores = [...new Set(groups.flat())].sort((a, b) => a - b);
+  const minS = allScores[0], maxS = allScores.at(-1);
+
+  if (barInstance) barInstance.destroy();
+  barInstance = new Chart(
+    document.getElementById('bar-chart').getContext('2d'),
+    {
+      type: 'bar',
+      data: {
+        labels: graders,
+        datasets: allScores.map(s => ({
+          label: String(s),
+          data: groups.map(g => g.length ? (g.filter(v => v === s).length / g.length * 100) : 0),
+          backgroundColor: rdylgn(s, minS, maxS),
+        })),
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          title:   { display: true, text: 'Score Distribution per Grader (%)' },
+          legend:  { position: 'right' },
+          tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y.toFixed(1)}%` } },
+        },
+        scales: {
+          x: { stacked: true },
+          y: { stacked: true, max: 100, title: { display: true, text: '%' } },
+        },
+      },
+    }
+  );
+}
+
+function drawBoxPlots(graders, groups) {
+  const canvas = document.getElementById('box-canvas');
+  const dpr = window.devicePixelRatio || 1;
+  const CW = canvas.offsetWidth, CH = 340;
+  canvas.width = CW * dpr; canvas.height = CH * dpr;
+  canvas.style.height = CH + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const pad = { top: 36, right: 18, bottom: 52, left: 44 };
+  const pw = CW - pad.left - pad.right;
+  const ph = CH - pad.top - pad.bottom;
+
+  const allVals = groups.flat();
+  const allScores = [...new Set(allVals)].sort((a, b) => a - b);
+  const yMin = allScores[0], yMax = allScores.at(-1);
+  const span = (yMax - yMin) || 1;
+  const margin = span * 0.1;
+  const yScale = v => pad.top + ph * (1 - (v - yMin + margin) / (span + 2 * margin));
+
+  const k = graders.length;
+  const bw = (pw / k) * 0.42;
+  const cx = i => pad.left + (i + 0.5) * (pw / k);
+
+  // Background
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, CW, CH);
+
+  // Grid lines + Y labels
+  ctx.font = `${11 * Math.min(1, CW / 400)}px system-ui`;
+  ctx.textAlign = 'right';
+  allScores.forEach(v => {
+    const y = yScale(v);
+    ctx.strokeStyle = '#e9ecef'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + pw, y); ctx.stroke();
+    ctx.fillStyle = '#6c757d';
+    ctx.fillText(v, pad.left - 5, y + 4);
+  });
+
+  // Y axis line
+  ctx.strokeStyle = '#adb5bd'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(pad.left, pad.top); ctx.lineTo(pad.left, pad.top + ph); ctx.stroke();
+
+  // Title
+  ctx.fillStyle = '#212529'; ctx.font = 'bold 13px system-ui';
+  ctx.textAlign = 'center';
+  ctx.fillText('Score Distributions', CW / 2, 20);
+
+  // One box plot per grader
+  groups.forEach((data, i) => {
+    const s = [...data].sort((a, b) => a - b);
+    const n = s.length;
+    const q1 = percentile(s, 25), med = percentile(s, 50), q3 = percentile(s, 75);
+    const iqr = q3 - q1;
+    const wLo = Math.max(s[0], q1 - 1.5 * iqr);
+    const wHi = Math.min(s[n-1], q3 + 1.5 * iqr);
+    const x = cx(i), capW = bw * 0.45;
+
+    // Box fill + stroke
+    const bTop = yScale(q3), bBot = yScale(q1);
+    ctx.fillStyle = 'rgba(13,110,253,0.13)';
+    ctx.fillRect(x - bw/2, bTop, bw, bBot - bTop);
+    ctx.strokeStyle = '#0d6efd'; ctx.lineWidth = 1.5;
+    ctx.strokeRect(x - bw/2, bTop, bw, bBot - bTop);
+
+    // Median line
+    ctx.lineWidth = 2.5; ctx.strokeStyle = '#0d6efd';
+    ctx.beginPath(); ctx.moveTo(x - bw/2, yScale(med)); ctx.lineTo(x + bw/2, yScale(med)); ctx.stroke();
+
+    // Whiskers + caps
+    ctx.strokeStyle = '#495057'; ctx.lineWidth = 1.5;
+    [[wLo, q1], [q3, wHi]].forEach(([from, to]) => {
+      ctx.beginPath(); ctx.moveTo(x, yScale(from)); ctx.lineTo(x, yScale(to)); ctx.stroke();
+      const capY = yScale(from);
+      ctx.beginPath(); ctx.moveTo(x - capW/2, capY); ctx.lineTo(x + capW/2, capY); ctx.stroke();
+    });
+
+    // Outliers (red dots)
+    ctx.fillStyle = '#dc3545';
+    s.forEach(v => {
+      if (v < wLo || v > wHi) {
+        ctx.beginPath(); ctx.arc(x, yScale(v), 3, 0, 2 * Math.PI); ctx.fill();
+      }
+    });
+
+    // X label
+    ctx.fillStyle = '#212529';
+    ctx.font = `${12 * Math.min(1, CW / 400)}px system-ui`;
+    ctx.textAlign = 'center';
+    ctx.fillText(graders[i], x, CH - pad.bottom + 18);
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Main entry point
+// ════════════════════════════════════════════════════════════════════════════
+
+function analyze(rows) {
+  const errEl = document.getElementById('error-msg');
+  errEl.textContent = '';
+  try {
+    const records = rowsToRecords(rows);
+    const { graders, groups } = groupRecords(records);
+    if (graders.length < 2) throw new Error('Need at least 2 graders.');
+
+    const kw   = kruskalWallis(groups);
+    const dunn = kw.p < 0.05 ? dunnTest(groups) : null;
+
+    document.getElementById('data-summary').innerHTML =
+      `${records.length} scores &nbsp;&middot;&nbsp; ${graders.length} graders: <strong>${graders.join(', ')}</strong>`;
+    document.getElementById('stats-table').innerHTML = renderStats(graders, groups);
+    document.getElementById('kw-result').innerHTML   = renderKW(kw);
+
+    const dunnCard = document.getElementById('dunn-card');
+    if (dunn) {
+      document.getElementById('dunn-result').innerHTML = renderDunn(dunn, graders);
+      dunnCard.style.display = '';
+    } else {
+      dunnCard.style.display = 'none';
+    }
+
+    document.getElementById('results').style.display = '';
+    renderBarChart(graders, groups);
+    requestAnimationFrame(() => drawBoxPlots(graders, groups));
+
+  } catch (e) {
+    errEl.textContent = e.message;
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// File & input handling
+// ════════════════════════════════════════════════════════════════════════════
+
+function loadFile(file) {
+  const reader = new FileReader();
+  if (/\.xlsx?$/i.test(file.name)) {
+    reader.onload = e => {
+      const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false })
+                              .map(r => r.map(c => String(c ?? '').trim()));
+      document.getElementById('data-input').value = rows.map(r => r.join('\t')).join('\n');
+      analyze(rows);
+    };
+    reader.readAsArrayBuffer(file);
+  } else {
+    reader.onload = e => {
+      document.getElementById('data-input').value = e.target.result;
+      analyze(parseTSV(e.target.result));
+    };
+    reader.readAsText(file);
+  }
+}
+
+// Drag-and-drop
+const dz = document.getElementById('dropzone');
+dz.addEventListener('dragover',  e => { e.preventDefault(); dz.classList.add('over'); });
+dz.addEventListener('dragleave', ()  => dz.classList.remove('over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('over');
+  const f = e.dataTransfer.files[0];
+  if (f) loadFile(f);
+});
+document.getElementById('file-input').addEventListener('change', e => {
+  if (e.target.files[0]) loadFile(e.target.files[0]);
+});
+
+// Button and paste
+document.getElementById('analyze-btn').addEventListener('click', () =>
+  analyze(parseTSV(document.getElementById('data-input').value)));
+document.getElementById('data-input').addEventListener('paste', () =>
+  setTimeout(() => analyze(parseTSV(document.getElementById('data-input').value)), 30));
+</script>
+</body>
+</html>
