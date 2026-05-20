@@ -92,6 +92,57 @@ tr:nth-child(even) td { background: #f8f9fa; }
 
 <main>
 
+  <!-- ── About ──────────────────────────────────────────────────────── -->
+  <section class="card" aria-labelledby="h2-about">
+    <h2 id="h2-about">About This Tool</h2>
+    <p style="margin-bottom:1rem">
+      Tests whether multiple graders applied the same scoring standards when each grader
+      was randomly assigned a different set of exams.
+    </p>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem">
+
+      <div>
+        <h3 style="font-size:0.9rem;font-weight:600;color:#198754;margin-bottom:0.5rem">&#10003; Appropriate when</h3>
+        <ul style="font-size:0.875rem;padding-left:1.25rem;line-height:1.7">
+          <li>Graders were <strong>randomly assigned</strong> to students (each exam graded by exactly one person)</li>
+          <li>You want to check whether graders scored <strong>similarly overall</strong></li>
+          <li>Scores are <strong>ordinal</strong> (e.g. 0&ndash;100, letter grades, rubric levels)</li>
+        </ul>
+      </div>
+
+      <div>
+        <h3 style="font-size:0.9rem;font-weight:600;color:#dc3545;margin-bottom:0.5rem">&#10007; Not appropriate when</h3>
+        <ul style="font-size:0.875rem;padding-left:1.25rem;line-height:1.7">
+          <li>The <strong>same exam was graded by multiple graders</strong> &mdash; use Fleiss&rsquo; Kappa or Krippendorff&rsquo;s Alpha instead, which directly measure pairwise agreement on the same item</li>
+          <li>Graders were <strong>not randomly assigned</strong> (e.g. one grader took all the hard exams), since systematic differences in exam difficulty would confound the result</li>
+          <li>You have <strong>fewer than ~5 scores per grader</strong> (low statistical power)</li>
+        </ul>
+      </div>
+
+    </div>
+
+    <details style="margin-top:1.1rem">
+      <summary style="cursor:pointer;font-size:0.875rem;font-weight:600;color:#495057">Statistical method</summary>
+      <div style="font-size:0.875rem;line-height:1.7;margin-top:0.6rem;padding-left:0.5rem;border-left:3px solid #dee2e6;color:#495057">
+        <p>The primary test is <strong>Kruskal-Wallis</strong>, a non-parametric one-way ANOVA on ranks:</p>
+        <p style="margin:0.4rem 0 0.4rem 1rem;font-style:italic">H&#x2080;: all graders draw scores from the same distribution</p>
+        <p>
+          It is preferred over standard ANOVA because grading scores are ordinal and typically skewed
+          (many high scores), which violates ANOVA&rsquo;s normality assumption. Kruskal-Wallis makes no such assumption.
+        </p>
+        <p style="margin-top:0.5rem">
+          If the test is significant (p &lt; 0.05), <strong>Dunn&rsquo;s post-hoc test</strong> with Bonferroni
+          correction runs automatically to identify which specific grader pairs differ.
+        </p>
+        <p style="margin-top:0.5rem">
+          <strong>&eta;&sup2;</strong> (eta-squared) is reported as an effect size:
+          values near 0 indicate negligible differences between graders regardless of sample size.
+        </p>
+      </div>
+    </details>
+  </section>
+
   <!-- ── Input ───────────────────────────────────────────────────────── -->
   <section class="card" aria-labelledby="h2-input">
     <h2 id="h2-input">Data Input</h2>
