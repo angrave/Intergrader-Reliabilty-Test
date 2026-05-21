@@ -1,8 +1,8 @@
 # Grading Reliability Analysis
 
-**Author:** Lawrence Angrave
+Tests whether multiple graders applied the same scoring standards when each grader was randomly assigned a different set of exams. This repo contains a python version you can run locally and a web version that runs inside your browser -
 
-Tests whether multiple graders applied the same scoring standards when each grader was randomly assigned a different set of exams.
+https://angrave.github.io/Intergrader-Reliabilty-Test/
 
 ## When to use this
 
