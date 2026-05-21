@@ -480,12 +480,12 @@ function renderDunn(dunn, graders, alpha = 0.05) {
 
 let barInstance = null;
 
-// Interpolate Illini Orange (#FF5F05) to Illini Blue (#13294B) for a score within [minS, maxS]
+// Interpolate Illini Blue (#13294B) to Illini Orange (#FF5F05) for a score within [minS, maxS]
 function rdylgn(score, minS, maxS) {
   const t = maxS === minS ? 1 : (score - minS) / (maxS - minS);
-  const r = Math.round(0xFF + t * (0x13 - 0xFF));
-  const g = Math.round(0x5F + t * (0x29 - 0x5F));
-  const b = Math.round(0x05 + t * (0x4B - 0x05));
+  const r = Math.round(0x13 + t * (0xFF - 0x13));
+  const g = Math.round(0x29 + t * (0x5F - 0x29));
+  const b = Math.round(0x4B + t * (0x05 - 0x4B));
   return `rgba(${r},${g},${b},0.88)`;
 }
 
@@ -511,7 +511,7 @@ function renderBarChart(graders, groups) {
         responsive: true,
         plugins: {
           title:   { display: true, text: 'Score Distribution per Grader (%)' },
-          legend:  { position: 'right' },
+          legend:  { position: 'right', reverse: true },
           tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y.toFixed(1)}%` } },
         },
         scales: {
