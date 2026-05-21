@@ -173,7 +173,8 @@ tr:nth-child(even) td { background: #f8f9fa; }
     </p>
 
     <button id="analyze-btn">Analyze</button>
-    <button id="example-btn" style="background:#6c757d;margin-left:0.5rem">Load example data</button>
+    <button id="example-btn" style="background:#6c757d;margin-left:0.5rem">Load example 1</button>
+    <button id="example2-btn" style="background:#6c757d;margin-left:0.5rem">Load example 2</button>
     <!-- role="alert" causes screen readers to announce error messages immediately -->
     <span id="error-msg" role="alert"></span>
   </section>
@@ -722,14 +723,13 @@ document.getElementById('analyze-btn').addEventListener('click', () =>
 document.getElementById('data-input').addEventListener('paste', () =>
   setTimeout(() => analyze(parseDelimited(document.getElementById('data-input').value)), 30));
 
-// Load example data from scores.tsv in the same directory
-document.getElementById('example-btn').addEventListener('click', () => {
-  const btn = document.getElementById('example-btn');
+function loadExample(filename, btnId, btnLabel) {
+  const btn = document.getElementById(btnId);
   btn.disabled = true;
   btn.textContent = 'Loading…';
-  fetch('scores.tsv')
+  fetch(filename)
     .then(r => {
-      if (!r.ok) throw new Error(`Could not fetch scores.tsv (${r.status})`);
+      if (!r.ok) throw new Error(`Could not fetch ${filename} (${r.status})`);
       return r.text();
     })
     .then(text => {
@@ -741,9 +741,14 @@ document.getElementById('example-btn').addEventListener('click', () => {
     })
     .finally(() => {
       btn.disabled = false;
-      btn.textContent = 'Load example data';
+      btn.textContent = btnLabel;
     });
-});
+}
+
+document.getElementById('example-btn').addEventListener('click', () =>
+  loadExample('scores.tsv', 'example-btn', 'Load example 1'));
+document.getElementById('example2-btn').addEventListener('click', () =>
+  loadExample('scores2.tsv', 'example2-btn', 'Load example 2'));
 </script>
 </body>
 </html>
