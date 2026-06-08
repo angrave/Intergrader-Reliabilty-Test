@@ -7,7 +7,8 @@ https://angrave.github.io/Intergrader-Reliabilty-Test/
 ## When to use this
 
 **Appropriate when:**
-- Graders were randomly assigned to students (each exam graded by exactly one person)
+- There was a pool of grading work and graders took a random, non-overlapping subset of work i.e.,
+- Graders were randomly assigned to student submissions and each submitted exam/question was graded by exactly one person
 - You want to check whether graders scored similarly overall
 - Scores are ordinal (e.g. 0–100, letter grades, rubric levels)
 
